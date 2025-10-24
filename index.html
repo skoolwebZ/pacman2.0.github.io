@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pac-Man By Josh J</title>
+<style>
+  body { margin:0; background:black; }
+  canvas { display:block; margin:0 auto; background:black; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="560" height="620"></canvas>
+<script>
+// Canvas
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const tileSize = 20, rows = 31, cols = 28;
+
+// Maze (simplified)
+let maze = [];
+for(let r=0; r<rows; r++){
+  maze[r] = [];
+  for(let c=0; c<cols; c++){
+    maze[r][c] = (r===0||c===0||r===rows-1||c===cols-1)?1:2;
+  }
+}
+maze[1][1]=3; maze[1][cols-2]=3; maze[rows-2][1]=3; maze[rows-2][cols-2]=3;
+
+// Base64 images (small placeholders)
+const pacmanImg = new Image();
+pacmanImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHklEQVQYV2NkYGD4z0AEYBxVSFIBYgNAGALZBgBq4oT9XwAAAABJRU5ErkJggg=='; // yellow dot placeholder
+
+const ghostImgs = {
+  red: new Image(),
+  pink: new Image(),
+  cyan: new Image(),
+  orange: new Image()
+};
+ghostImgs.red.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHklEQVQYV2NkYGD4z0AEYBxVSFIBYgNAGALZBgBq4oT9XwAAAABJRU5ErkJggg==';
+ghostImgs.pink.src = ghostImgs.red.src;
+ghostImgs.cyan.src = ghostImgs.red.src;
+ghostImgs.orange.src = ghostImgs.red.src;
+
+const fruitImg = new Image();
+fruitImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHklEQVQYV2NkYGD4z0AEYBxVSFIBYgNAGALZBgBq4oT9XwAAAABJRU5ErkJggg==';
+
+// Player
+let pacman = {x:14*tileSize, y:23*tileSize, speed:2, dirX:0, dirY:0, nextDirX:0, nextDirY:0};
+
+// Ghosts
+let ghosts = [
+  {x:13*tileSize, y:11*tileSize, color:'red', speed:1.5, dirX:0, dirY:0},
+  {x:14*tileSize, y:11*tileSize, color:'pink', speed:1.5, dirX:0, dirY:0},
+  {x:13*tileSize, y:12*tileSize, color:'cyan', speed:1.5, dirX:0, dirY:0},
+  {x:14*tileSize, y:12*tileSize, color:'orange', speed:1.5, dirX:0, dirY:0}
+];
+
+// Fruit
+let fruit = {x:Math.floor(Math.random()*cols)*tileSize, y:Math.floor(Math.random()*rows)*tileSize, active:true, value:100};
+
+// Score
+let score = 0;
+
+// Controls
+document.addEventListener('keydown', e=>{
+  switch(e.key){
+    case 'ArrowUp': pacman.nextDirX=0; pacman.nextDirY=-pacman.speed; break;
+    case 'ArrowDown': pacman.nextDirX=0; pacman.nextDirY=pacman.speed; break;
+    case 'ArrowLeft': pacman.nextDirX=-pacman.speed; pacman.nextDirY=0; break;
+    case 'ArrowRight': pacman.nextDirX=pacman.speed; pacman.nextDirY=0; break;
+    case 'r': resetGame(); break;
+  }
+});
+
+// Movement & collision
+function checkWall(x,y){
+  let c = Math.floor(x/tileSize);
+  let r = Math.floor(y/tileSize);
+  return maze[r][c]===1;
+}
+
+function movePacman(){
+  let nextX = pacman.x + pacman.nextDirX;
+  let nextY = pacman.y + pacman.nextDirY;
+  if(!checkWall(nextX,nextY)){
+    pacman.dirX = pacman.nextDirX;
+    pacman.dirY = pacman.nextDirY;
+  }
+  pacman.x += pacman.dirX;
+  pacman.y += pacman.dirY;
+
+  let c = Math.floor(pacman.x/tileSize);
+  let r = Math.floor(pacman.y/tileSize);
+  if(maze[r][c]===2){ maze[r][c]=0; score+=10; }
+  if(maze[r][c]===3){ maze[r][c]=0; score+=50; }
+  if(fruit.active && Math.abs(pacman.x-fruit.x)<tileSize/2 && Math.abs(pacman.y-fruit.y)<tileSize/2){
+    score+=fruit.value; fruit.active=false;
+  }
+}
+
+function moveGhosts(){
+  ghosts.forEach(g=>{
+    if(Math.random()<0.02){ 
+      let dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      let dir = dirs[Math.floor(Math.random()*dirs.length)];
+      g.dirX = dir[0]*g.speed; g.dirY = dir[1]*g.speed;
+    }
+    if(!checkWall(g.x+g.dirX,g.y+g.dirY)){ g.x+=g.dirX; g.y+=g.dirY; }
+    if(Math.abs(g.x-pacman.x)<tileSize && Math.abs(g.y-pacman.y)<tileSize){
+      alert('Game Over! Score: '+score);
+      resetGame();
+    }
+  });
+}
+
+// Draw
+function draw(){
+  ctx.fillStyle='black'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      if(maze[r][c]===1) ctx.fillStyle='blue', ctx.fillRect(c*tileSize,r*tileSize,tileSize,tileSize);
+      if(maze[r][c]===2) ctx.fillStyle='white', ctx.beginPath(), ctx.arc(c*tileSize+tileSize/2,r*tileSize+tileSize/2,4,0,Math.PI*2), ctx.fill();
+      if(maze[r][c]===3) ctx.fillStyle='yellow', ctx.beginPath(), ctx.arc(c*tileSize+tileSize/2,r*tileSize+tileSize/2,6,0,Math.PI*2), ctx.fill();
+    }
+  }
+
+  if(fruit.active) ctx.drawImage(fruitImg, fruit.x, fruit.y, tileSize, tileSize);
+  ctx.drawImage(pacmanImg, pacman.x, pacman.y, tileSize, tileSize);
+  ghosts.forEach(g=>ctx.drawImage(ghostImgs[g.color], g.x, g.y, tileSize, tileSize));
+
+  ctx.fillStyle='white';
+  ctx.font='20px Arial';
+  ctx.fillText('Score: '+score, 10, 20);
+  ctx.fillText('Made by Josh J', canvas.width-140, canvas.height-10);
+}
+
+// Reset
+function resetGame(){
+  pacman.x=14*tileSize; pacman.y=23*tileSize; pacman.dirX=0; pacman.dirY=0; pacman.nextDirX=0; pacman.nextDirY=0;
+  ghosts[0].x=13*tileSize; ghosts[0].y=11*tileSize;
+  ghosts[1].x=14*tileSize; ghosts[1].y=11*tileSize;
+  ghosts[2].x=13*tileSize; ghosts[2].y=12*tileSize;
+  ghosts[3].x=14*tileSize; ghosts[3].y=12*tileSize;
+  score=0;
+  fruit.active=true; fruit.x=Math.floor(Math.random()*cols)*tileSize; fruit.y=Math.floor(Math.random()*rows)*tileSize;
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) if(maze[r][c]===0) maze[r][c]=2;
+  maze[1][1]=3; maze[1][cols-2]=3; maze[rows-2][1]=3; maze[rows-2][cols-2]=3;
+}
+
+// Loop
+function loop(){
+  movePacman();
+  moveGhosts();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
