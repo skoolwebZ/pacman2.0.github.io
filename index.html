@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pac-Man By Josh</title>
+<style>
+  body { margin:0; background:black; }
+  canvas { display:block; margin:0 auto; background:black; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="560" height="620"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const tileSize = 20, rows = 31, cols = 28;
+
+// Simplified original maze (expand for full arcade layout)
+let maze=[
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,3,2,2,2,2,2,2,2,2,2,3,1,1,3,2,2,2,2,2,2,2,2,2,2,3,1,1],
+  [1,2,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,2,1,2,1],
+  [1,2,1,0,1,2,1,0,0,0,1,2,1,1,2,1,0,0,0,1,2,1,0,1,1,2,2,1],
+  [1,2,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,2,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+while(maze.length<rows) maze.push(maze[maze.length-1].slice());
+
+// Pac-Man
+let pacman={x:14,y:23,dir:0,nextDir:0,mouth:0.25,mouthDir:1};
+
+// Ghosts
+const ghosts=[
+  {x:13,y:11,color:'red',frightened:false,target:()=>({x:pacman.x,y:pacman.y})},
+  {x:14,y:11,color:'pink',frightened:false,target:()=>({x:pacman.x+4,y:pacman.y})},
+  {x:13,y:12,color:'cyan',frightened:false,target:()=>({x:pacman.x-4,y:pacman.y})},
+  {x:14,y:12,color:'orange',frightened:false,target:()=>({x:0,y:rows-1})}
+];
+
+// Score
+let score=0;
+
+// Bonus fruit
+let fruit={active:false,x:0,y:0,value:100};
+
+// Sounds
+const dotSound=new Audio('https://freesound.org/data/previews/66/66717_931655-lq.mp3');
+const powerSound=new Audio('https://freesound.org/data/previews/331/331912_3248244-lq.mp3');
+const deathSound=new Audio('https://freesound.org/data/previews/156/156103_2730995-lq.mp3');
+const eatGhostSound=new Audio('https://freesound.org/data/previews/341/341695_6241731-lq.mp3');
+const fruitSound=new Audio('https://freesound.org/data/previews/331/331912_3248244-lq.mp3');
+
+// Controls
+document.addEventListener('keydown', e=>{
+  switch(e.key){
+    case 'ArrowUp': pacman.nextDir=0; break;
+    case 'ArrowRight': pacman.nextDir=1; break;
+    case 'ArrowDown': pacman.nextDir=2; break;
+    case 'ArrowLeft': pacman.nextDir=3; break;
+    case 'r': resetGame(); break;
+  }
+});
+
+function canMove(x,y){return maze[Math.floor(y)][Math.floor(x)]!==1;}
+
+function movePacman(){
+  const dx=[0,1,0,-1], dy=[-1,0,1,0];
+  let nx=pacman.x+dx[pacman.nextDir]*0.2;
+  let ny=pacman.y+dy[pacman.nextDir]*0.2;
+  if(canMove(nx,ny)) pacman.dir=pacman.nextDir;
+
+  nx=pacman.x+dx[pacman.dir]*0.2;
+  ny=pacman.y+dy[pacman.dir]*0.2;
+  if(canMove(nx,ny)){ pacman.x=nx; pacman.y=ny; }
+
+  pacman.mouth+=0.05*pacman.mouthDir;
+  if(pacman.mouth>0.25 || pacman.mouth<0) pacman.mouthDir*=-1;
+
+  let tx=Math.floor(pacman.x), ty=Math.floor(pacman.y);
+  if(maze[ty][tx]===2){ maze[ty][tx]=0; score+=10; dotSound.play(); }
+  if(maze[ty][tx]===3){ maze[ty][tx]=0; score+=50; powerSound.play(); ghosts.forEach(g=>g.frightened=true); }
+
+  if(fruit.active && Math.floor(pacman.x)===fruit.x && Math.floor(pacman.y)===fruit.y){
+    score+=fruit.value;
+    fruit.active=false;
+    fruitSound.play();
+  }
+}
+
+function moveGhosts(){
+  ghosts.forEach(g=>{
+    const dx=[0,1,0,-1], dy=[-1,0,1,0];
+    const target=g.frightened?{x:Math.random()*cols,y:Math.random()*rows}:g.target();
+    let bestDir=g.dir, minDist=Infinity;
+    [0,1,2,3].forEach(d=>{
+      let nx=g.x+dx[d]*0.1, ny=g.y+dy[d]*0.1;
+      if(canMove(nx,ny)){
+        let dist=Math.hypot(target.x-nx,target.y-ny);
+        if(dist<minDist){ minDist=dist; bestDir=d; }
+      }
+    });
+    g.dir=bestDir;
+    g.x+=dx[g.dir]*0.1; g.y+=dy[g.dir]*0.1;
+
+    if(Math.abs(g.x-pacman.x)<0.5 && Math.abs(g.y-pacman.y)<0.5){
+      if(g.frightened){ g.x=13; g.y=11; g.frightened=false; score+=200; eatGhostSound.play(); }
+      else{ deathSound.play(); alert('Game Over! Score:'+score); resetGame(); }
+    }
+  });
+}
+
+// Fruit spawn timer
+let fruitTimer=0;
+function spawnFruit(){
+  fruitTimer++;
+  if(fruitTimer>1000){ 
+    fruitTimer=0;
+    fruit.active=true;
+    fruit.x=Math.floor(Math.random()*(cols-2))+1;
+    fruit.y=Math.floor(Math.random()*(rows-2))+1;
+    if(maze[fruit.y][fruit.x]!==0) fruit.active=false;
+  }
+}
+
+function draw(){
+  ctx.fillStyle='black'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      if(maze[r][c]===1){ ctx.fillStyle='blue'; ctx.fillRect(c*tileSize,r*tileSize,tileSize,tileSize); }
+      if(maze[r][c]===2){ ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(c*tileSize+10,r*tileSize+10,4,0,Math.PI*2); ctx.fill(); }
+      if(maze[r][c]===3){ ctx.fillStyle='yellow'; ctx.beginPath(); ctx.arc(c*tileSize+10,r*tileSize+10,6,0,Math.PI*2); ctx.fill(); }
+    }
+  }
+
+  if(fruit.active){
+    ctx.fillStyle='red';
+    ctx.beginPath();
+    ctx.arc(fruit.x*tileSize+10,fruit.y*tileSize+10,8,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle='yellow';
+  ctx.beginPath();
+  let startAng=pacman.mouth*Math.PI*2;
+  ctx.moveTo(pacman.x*tileSize+10,pacman.y*tileSize+10);
+  ctx.arc(pacman.x*tileSize+10,pacman.y*tileSize+10,10,startAng,Math.PI*2-startAng);
+  ctx.fill();
+
+  ghosts.forEach(g=>{
+    ctx.fillStyle=g.frightened?'blue':g.color;
+    ctx.beginPath();
+    ctx.arc(g.x*tileSize+10,g.y*tileSize+10,10,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle='white';
+  ctx.font='20px Arial';
+  ctx.fillText('Score:'+score,10,20);
+  ctx.fillText('Made by Josh J',canvas.width-140,canvas.height-10);
+}
+
+function resetGame(){
+  pacman.x=14; pacman.y=23; pacman.dir=0; pacman.nextDir=0; pacman.mouth=0.25; pacman.mouthDir=1;
+  ghosts[0].x=13; ghosts[0].y=11; ghosts[0].frightened=false;
+  ghosts[1].x=14; ghosts[1].y=11; ghosts[1].frightened=false;
+  ghosts[2].x=13; ghosts[2].y=12; ghosts[2].frightened=false;
+  ghosts[3].x=14; ghosts[3].y=12; ghosts[3].frightened=false;
+  score=0;
+  fruit.active=false; fruitTimer=0;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      if(maze[r][c]===0) maze[r][c]=2;
+    }
+  }
+  maze[1][1]=3; maze[1][cols-2]=3; maze[rows-2][1]=3; maze[rows-2][cols-2]=3;
+}
+
+// Main game loop
+function loop(){
+  movePacman();
+  moveGhosts();
+  spawnFruit();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
